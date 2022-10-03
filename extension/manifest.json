@@ -1,0 +1,23 @@
+{
+  "author": "Oday Mansour",
+  "description": "Translate text through Amazon API Gateway, AWS Lambda, and Amazon Translate",
+  "manifest_version": 2,
+  "name": "Translate through API Gateway",
+  "version": "0.1",
+  "permissions": ["tabs","menus","<all_urls>"],
+  "homepage_url": "https://github.com/aws-samples/amazon-api-gateway-powered-browser-extension",
+  "icons": {
+    "48": "icons/aws-transparent.png"
+  },
+
+  "background": {
+      "scripts": ["background_script.js"]
+  }, 
+
+  "content_scripts": [
+    {
+        "matches": ["<all_urls>"],
+        "js": ["content_script.js"]
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+Resources:
+
+  apgTranslateApig:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: Translate Extension API Gateway
+      ProtocolType: HTTP
+
+  apgTranslateAPIGPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref apgTranslateFunc
+      Action: "lambda:InvokeFunction"
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apgTranslateApig}/*/*/translate
+
+  apgTranslateIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref apgTranslateApig
+      Description: Lambda proxy integration
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      PayloadFormatVersion: "2.0"
+      IntegrationUri: !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${apgTranslateFunc.Arn}/invocations'
+
+  apgTranslateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref apgTranslateApig
+      RouteKey: "POST /translate"
+      Target: !Sub integrations/${apgTranslateIntegration}
+
+  apgTranslateStage:
+    Type: 'AWS::ApiGatewayV2::Stage'
+    Properties:
+      StageName: prod
+      Description: Prod Stage
+      ApiId: !Ref apgTranslateApig
+      AutoDeploy: True
+
+  apgTranslateFunc:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Role: !GetAtt apgTranslateRole.Arn
+      Handler: index.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          import base64
+          import boto3
+
+          client = boto3.client('translate')
+
+          def lambda_handler(event, context):
+              request_bytes = base64.b64decode(event['body'])
+              request_string = request_bytes.decode("utf-8")
+              separator = request_string.split('\r\n')[0]
+              data = request_string.split(separator)[1]
+              text_to_translate = data.split('\r\n')[3]
+
+              response = client.translate_text(
+                  Text=text_to_translate,
+                  SourceLanguageCode='en', # replace source language here
+                  TargetLanguageCode='fr'  # Replace destination language here
+              )
+
+              return {
+                  'statusCode': 200,
+                  'headers': {"content-type":"application/json; charset=utf-8"},
+                  'body': json.dumps({'translated_text': response['TranslatedText']})
+              }
+
+  apgTranslateRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/TranslateReadOnly
+
+Outputs:
+  translateURL:
+    Description: Translation URL
+    Value: !Sub ${apgTranslateApig.ApiEndpoint}/prod/translate
